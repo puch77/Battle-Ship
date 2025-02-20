@@ -1,0 +1,1664 @@
+       IDENTIFICATION DIVISION.
+@@@@@  PROGRAM-ID. Z40051.
+       AUTHOR. MONIKA PUCHALSKA.
+       DATE-WRITTEN.  17/12/2024.
+       DATE-COMPILED. 14/01/2025.
+
+      ******************************************************************
+      *                         --------                               *
+@@@@@ *                          Z40051                                *
+      *                         --------                               *
+      *   A PROGRAM THAT SIMULATES THE CLASSIC BATTLESHIP GAME, WHERE  * 
+      *   A PLAYER COMPETES AGAINST A COMPUTER TO LOCATE AND SINK      *
+      *   SHIPS PLACED ON A GAME BOARD.                                *
+      *                                                                *
+      *   PROGRAM RUNS UNTIL F3 IS PRESSED OR GAMEOVER.                *
+      *   CALCULATION IS PERFORMED ONLY IF ENTER OR F5 ARE PRESSED.    *
+      *                                                                *
+      *   DB2 TABLES             ACCESS                                *
+      *   ----------             ------                                *
+      *                                                                *
+      ******************************************************************
+      *                       ENVIRONMENT DIVISION                     *
+      ******************************************************************
+      *
+       ENVIRONMENT DIVISION.
+      *
+       CONFIGURATION SECTION.
+      *
+       SOURCE-COMPUTER.
+           IBM-3090.
+       OBJECT-COMPUTER.
+           IBM-3090.
+       SPECIAL-NAMES.
+
+
+
+      ******************************************************************
+      *                  DATA DIVISION                                 *
+      ******************************************************************
+       DATA DIVISION.
+
+
+      ******************************************************************
+      *                  WORKING-STORAGE SECTION                       *
+      ******************************************************************
+       WORKING-STORAGE SECTION.
+
+      *START OF WORKING STORAGE
+
+
+      *********************
+      *     SWITCHES      *
+      *********************
+
+       01 SW.
+
+      * SWITCH INDICATING IF CURSOR IS OPEN OR NOT
+           05 SW-FIRST                         PIC X(1) VALUE 'F'.
+                88 SO-FIRST-TIME-YES             VALUE 'T'.
+                88 SO-FIRST-TIME-NO              VALUE 'F'.
+      * USED FOR ASSESSING WHAT KEY WAS PRESSED BY THE USER
+           05 SW-PRESSED-KEY                   PIC X(1) VALUE 'O'.
+                88 SO-PRESSED-KEY-F3                    VALUE '3'.
+                88 SO-PRESSED-KEY-ENTER                 VALUE 'E'.
+                88 SO-PRESSED-KEY-OTHER                 VALUE 'O'.
+                88 SO-PRESSED-KEY-F5                    VALUE '5'.
+
+      * INDICATES WHETHER AT THE END OF THE PROGRAM IT'S SUPPOSED
+      * TO KEEP LOOPING AND CALL ITSELF OR TERMINATE THE LOOP
+           05 SW-PROCESSING                    PIC X(1) VALUE 'N'.
+                88 SO-TERMINATE-PROCESSING              VALUE 'N'.
+                88 SO-KEEP-PROCESSING                   VALUE 'Y'.
+
+      * INDICATES IF THE CURSOR IS ON THE COPUTER'S BOARD
+           05 SW-CURSOR-ON-BOARD               PIC X(1) VALUE 'N'.
+                88 SO-CURSOR-ON-BOARD-NO                VALUE 'N'.
+                88 SO-CURSOR-ON-BOARD-YES               VALUE 'Y'.
+
+      * INDICATES IF COMPUTER SHIPS ARE PLACED 
+           05 SW-SHIP-STATUS                   PIC X VALUE 'N'.
+                88 SO-IS-PLACED                      VALUE 'Y'.
+                88 SO-IS-NOT-PLACED                  VALUE 'N'.
+
+      *********************
+      *     CONSTANTS     *
+      *********************
+       01 CT.
+          05 CT-PROGRAM-NAME                  PIC X(8)  VALUE 'Z40051'.
+          05 CT-WIDTH                         PIC 9(2)  VALUE 80.
+      *********************
+      *     VARIABLES     *
+      *********************
+
+       01 WS.
+      *    VISIBLE ERROR CODES
+           05 WS-EIBRESP-VIS          PIC 9(8).
+           05 SQLCODE-VIS             PIC -999.
+           05 WS-DUMMY                PIC X VALUE LOW-VALUES.
+
+      * INDICATES IF PLAYER DISTRIBUTED ITS SHIPS CORRECTLY
+           05 WS-CORRECT-INPUT-FLAG            PIC X VALUE 'N'.
+             88 SO-INCORRECT-INPUT                   VALUE 'N'.
+             88 SO-CORRECT-INPUT                     VALUE 'Y'.
+
+           05 WS-VISITED-FIELD.
+             10 WS-VISITED-LINE OCCURS 10 TIMES.
+               15 WS-VISITED-COL OCCURS 10 TIMES.
+                 20 WS-VISITED-CELL   PIC X(1) VALUE 'N'.
+                    88 SO-VISITED     VALUE 'Y'.
+                    88 SO-NOT-VISITED VALUE 'N'.                 
+           05 WS-ACTIVE-SHIP          PIC X(1) VALUE 'N'.
+             88 SO-ACTIVE-SHIP-YES             VALUE 'Y'.
+             88 SO-ACTIVE-SHIP-NO              VALUE 'N'.
+
+           05 WS-WHOSE-TURN           PIC X VALUE SPACE.
+             88 SO-PLAYER-STARTS            VALUE 'P'.
+             88 SO-COMPUTER-STARTS          VALUE 'C'.
+
+           05 WS-PLAYER-SHIP-COUNTER.
+             10 WS-2                 PIC 9 VALUE 0.
+             10 WS-3                 PIC 9 VALUE 0.
+             10 WS-4                 PIC 9 VALUE 0.
+             10 WS-5                 PIC 9 VALUE 0.
+           05 WS-CURRENT-SHIP-SIZE   PIC 9  VALUE 0.
+           05 WS-SHIP-AMOUNT         PIC 99 VALUE 0.
+           
+           05 RANDOM-NUMBER          COMP-1 VALUE 0.
+           05 RANDOM-INTEGER         PIC 9 VALUE 0.
+           05 WS-SEED                PIC 9(9) VALUE 0.
+           05 DIRECTION              PIC X VALUE 'H'.
+                88 HORIZONTAL              VALUE 'H'.
+                88 VERTICAL                VALUE 'V'.
+           05 ROW-START              PIC 99 VALUE 1.
+           05 COL-START              PIC 99 VALUE 1.
+           05 COL-START-ANUM         PIC X(1) VALUE SPACE.
+           05 RANDOM-VAL1            PIC 9(12).
+           05 RANDOM-VAL2            PIC 9(12).
+           05 RANDOM-VAL3            PIC 9(12).
+           05 WS-CURRENT-RUN         PIC 9(6) VALUE 0.
+           05 WS-CURRENT-SHOT-NUMBER PIC 9(6) VALUE 0.
+
+      * TO ITERATE THROUGH THE FIELDS WHEN VALIDATING COMPUTER SHIPS
+      * DISTRIBUTION
+           05 ROW-DELTA              PIC S9(1) COMP-3.
+           05 COL-DELTA              PIC S9(1) COMP-3.
+           05 CALCULATED-ROW         PIC 99 VALUE 0.
+           05 CALCULATED-COL         PIC 99 VALUE 0.
+           05 ADJACENT-ROW           PIC 99.
+           05 ADJACENT-COL           PIC 99.
+           05 INDX                   PIC 9.
+      * COUNTERS AND INDEXES
+           05 ROW-INDEX              PIC 99 VALUE 1.
+           05 COL-INDEX              PIC 99 VALUE 1.
+           05 WS-X-VALUE             PIC 99.
+           05 WS-Y-VALUE             PIC 99.
+           05 WS-SHIP-ID             PIC 99.
+           05 WS-FIELD-COUNTER       PIC 9(1) VALUE 0.
+           05 WS-SHIP-COUNTER        PIC 9(2) VALUE 0.
+           05 WS-COMP-SHIP-INDEX     PIC 9(2).
+           05 WS-COMP-CELL-INDEX     PIC 9(2).
+           05 WS-PL-SHIP-INDEX       PIC 9(2).
+           05 WS-PL-CELL-INDEX       PIC 9(2).
+           05 WS-CURSOR-ROW          PIC S99 COMP-3.
+           05 WS-CURSOR-COL          PIC S99 COMP-3.
+           05 WS-CURSOR-POSITION     PIC S9(4) COMP VALUE 536.
+           05 WS-TEMP-HIT-COUNT      PIC 9(1).
+
+           05 WS-BOARD-CONTENT.
+             10 WS-BOARD-ROWS OCCURS 10 TIMES.
+                15 WS-BOARD-CELL OCCURS 10 TIMES.
+                   20 WS-FIELDA         PIC X.
+                   20 WS-FIELDC         PIC X.
+
+           05 DISPLAY-LINE              PIC X(90).
+           05 LINE-POSITION             PIC 9(03).
+           05 HIT-COORD                 PIC X(12).
+
+           05 WS-COMP-SHIPS.
+            10 WS-COMP-SHIP OCCURS 10 TIMES.
+              15 WS-COMP-SHIP-ID        PIC 9(2).
+              15 WS-COMP-SHIP-STATUS    PIC X(1) VALUE 'N'.
+                88 COMP-UNSUNK                   VALUE 'N'.
+                88 COMP-SUNK                     VALUE 'Y'.
+              15 WS-SHIP-LENGTH        PIC 9(1).
+              15 WS-SHIP-CELLS OCCURS 5 TIMES.
+                20 CELL-X              PIC 99.
+                20 CELL-Y              PIC 99.
+                20 CELL-HIT            PIC X(1) VALUE 'N'.
+                  88 COMP-HIT          VALUE 'Y'.
+                  88 COMP-NOT-HIT      VALUE 'N'.
+
+           05 WS-PLAYER-SHIPS.
+            10 WS-PL-SHIP OCCURS 10 TIMES.
+              15 WS-PL-SHIP-ID         PIC 9(2).
+              15 WS-PL-SHIP-STATUS     PIC X(1) VALUE 'N'.
+                88 PL-UNSUNK                    VALUE 'N'.
+                88 PL-SUNK                      VALUE 'Y'.
+              15 WS-PL-SHIP-LENGTH     PIC 9(1).
+              15 WS-PL-SHIP-CELLS OCCURS 5 TIMES.
+                20 PL-CELL-X           PIC 99.
+                20 PL-CELL-Y           PIC 99.
+                20 PL-CELL-HIT         PIC X(1) VALUE 'N'.
+                  88 PL-HIT                     VALUE 'Y'.
+                  88 PL-NOT-HIT                 VALUE 'N'.
+
+           05 COMP-LAST-HIT-STATUS.
+             10 HIT-ROW-VALUE          PIC 9(2).
+             10 HIT-COL-VALUE          PIC 9(2).
+             10 HIT-DIRECTION          PIC X(1) VALUE SPACE.
+                 88 IS-RIGHT                    VALUE 'R'.
+                 88 IS-LEFT                     VALUE 'L'.
+                 88 IS-UP                       VALUE 'U'.
+                 88 IS-DOWN                     VALUE 'D'.
+           05 WS-WHO-WINS              PIC X(1) VALUE SPACES.
+                 88 COMPUTER-WINS               VALUE 'C'.
+                 88 PLAYER-WINS                 VALUE 'P'.
+      *********************
+      *     COPYBOOKS     *
+      *********************
+          COPY ZZMP4002.
+          COPY DFHAID.
+          COPY DFHBMSCA.
+
+       LINKAGE SECTION.
+       01 DFHCOMMAREA PIC X(2000).
+      *********************
+      *   DB2 DCLGENS     *
+      *********************
+      *********************
+      *   DB2 CURSORS     *
+      *********************
+      *
+      ******************************************************************
+      *                                                                *
+      *                PROCEDURE DIVISION                              *
+      *                                                                *
+      ******************************************************************
+       PROCEDURE DIVISION USING DFHCOMMAREA.
+      *
+           PERFORM  1000-INIT
+      *
+           PERFORM  2000-PROCESS
+      *
+           PERFORM  3000-FINAL.
+      *
+
+      /
+      ******************************************************************
+      *                    1000-INIT                                   *
+      *                                                                *
+      ******************************************************************
+       1000-INIT.
+      *
+           DISPLAY '-------INIT MONIKI-------'
+      *    INITIALIZE WS
+      * INITIALIZE WHOLE MAP WITH LOW-VALUES TO AVOID ERRORS
+           INITIALIZE MP4002I MP4002O
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+              PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+                 MOVE LOW-VALUES TO FIELDF(1,ROW-INDEX,COL-INDEX)
+                 MOVE LOW-VALUES TO FIELDF(2,ROW-INDEX,COL-INDEX)
+              END-PERFORM
+           END-PERFORM
+
+           MOVE LOW-VALUES TO OUT1F OUT2F OUT3F
+
+      * HANDLE ANY POTENTIAL ERRORS DURING CICS OPERATIONS
+           PERFORM 1050-IGNORE-CICS-ERRORS
+      * DETERMINE IF THIS IS THE FIRST EXECUTION OF THE PROGRAM
+           PERFORM 1100-CHECK-EIBCALEN
+      * PROCESS USER KEY INPUT (ENTER, F3, F5)
+           PERFORM 1200-ASSESS-PRESSED-KEY
+
+      * IF FIRST EXECUTION, CLEAR THE TERMINAL AND TELL THE PLAYER TO 
+      * DISTRIBUTE ITS SHIPS
+           IF SO-FIRST-TIME-YES
+              PERFORM 4100-CLEAR-TERMINAL
+
+              PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+                  PERFORM VARYING COL-INDEX FROM 1 BY 1 
+                                                   UNTIL COL-INDEX > 10
+                        MOVE DFHRED TO FIELDC(1,ROW-INDEX,COL-INDEX)
+                        MOVE DFHNEUTR TO FIELDC(2,ROW-INDEX,COL-INDEX)
+                        MOVE X'00' TO FIELDH(1,ROW-INDEX,COL-INDEX)
+                        MOVE X'00' TO FIELDA(1,ROW-INDEX,COL-INDEX)
+                        MOVE X'00' TO FIELDH(2,ROW-INDEX,COL-INDEX)
+                        MOVE X'00' TO FIELDA(2,ROW-INDEX,COL-INDEX)
+                        SET SO-NOT-VISITED(ROW-INDEX,COL-INDEX) TO TRUE
+                 END-PERFORM
+              END-PERFORM
+              MOVE X'00' TO OUT1A
+              MOVE X'00' TO OUT2A
+              MOVE X'00' TO OUT3A
+              MOVE X'00' TO OUT1H
+              MOVE X'00' TO OUT2H
+              MOVE X'00' TO OUT3H
+              MOVE X'00' TO OUT1C
+              MOVE X'00' TO OUT2C
+              MOVE X'00' TO OUT3C
+
+              MOVE ' PLACE YOUR ' TO OUT1O
+              MOVE 'SHIPS WITH X' TO OUT2O
+              MOVE 'AND PRESS F5' TO OUT3O
+           ELSE
+      * OTHERWISE, RESTORE BOARD STATE FROM THE PREVIOUS CALL
+              MOVE DFHCOMMAREA TO WS
+           END-IF
+           .
+      ******************************************************************
+      *                                                                *
+      *                     1050-IGNORE-CICS-ERRORS                    *
+      * ENSURES THAT ANTICIPATED CICS ERRORS ARE IGNORED AND PROGRAM   *
+      * FLOW IS UNITERRUPTED                                           *
+      ******************************************************************
+       1050-IGNORE-CICS-ERRORS.
+            EXEC CICS
+               IGNORE CONDITION ERROR
+            END-EXEC.
+            PERFORM 4000-CHECK-EIBRESP
+            .
+      /
+      ******************************************************************
+      *                     1100-CHECK-EIBCALEN                        *
+      *                                                                *
+      * DATA IS PASSED IN THE COMMAREA AFTER THE FIRST RUN, ALLOWING   *
+      * THE PROGRAM TO DETERMINE WHETHER IT IS THE 1ST CALL OR A       *
+      * SUBSEQUENT CALL. ONLY THE 1ST CALL WILL HAVE EIBCALEN = 0      *
+      ******************************************************************
+       1100-CHECK-EIBCALEN.
+            IF EIBCALEN = 0
+               SET SO-FIRST-TIME-YES TO TRUE
+            ELSE
+               SET SO-FIRST-TIME-NO  TO TRUE
+            END-IF
+            .
+      ******************************************************************
+      *                     1200-ASSESS-PRESSED-KEY                    *
+      * EVALUATES THE KEY PRESSED BY THE USER AND SETS APPROPRIATE FLAG*
+      * FOR PROGRAM CONTROL.
+      * IT USES THE EIBAID FIELD TO EVALUATE THE KEY INPUT.
+      * TRANSACTION PROCESSING WITH F5 OR ENTER AND RUNS UNTIL F3 IS 
+      * PRESSED.                                                       *
+      ******************************************************************
+       1200-ASSESS-PRESSED-KEY.
+           EVALUATE EIBAID
+             WHEN DFHENTER
+               SET SO-PRESSED-KEY-ENTER      TO TRUE
+               SET SO-KEEP-PROCESSING        TO TRUE
+               DISPLAY 'ENTER PRESSED'
+
+             WHEN DFHPF3
+               SET SO-PRESSED-KEY-F3         TO TRUE
+               SET SO-TERMINATE-PROCESSING   TO TRUE
+               DISPLAY 'F3 PRESSED'
+
+             WHEN DFHPF5
+               SET SO-PRESSED-KEY-F5         TO TRUE
+               SET SO-KEEP-PROCESSING        TO TRUE
+               DISPLAY 'F5 PRESSED'
+
+             WHEN OTHER
+               SET SO-PRESSED-KEY-OTHER      TO TRUE
+               SET SO-KEEP-PROCESSING        TO TRUE
+               DISPLAY 'OTHER KEY PRESSED'
+           END-EVALUATE
+           .
+      /
+      ******************************************************************
+      *                        2000-PROCESS                            *
+      *                                                                *
+      * MAIN PROCESSING LOGIC OF THE GAME.
+      * IF THE 1ST TIME CALL, IT INITIALIZES THE COMPUTER SHIPS AND 
+      * DISPLAYS IT IN LOGS. 
+      * IF F5 IS PRESSED IT VALIDATES THE PLAYER INPUT AND CHOOSES WHO
+      * STARTS.
+      * IF ENTER IS PRESSED IT CONTINUES THE GAME.
+      ******************************************************************
+       2000-PROCESS.
+           IF SO-FIRST-TIME-YES
+              MOVE 0 TO WS-CURRENT-SHOT-NUMBER
+              PERFORM 2005-DISTR-COMP-SHIPS
+              PERFORM 2010-DISPLAY-COMPUTER-BOARD
+              PERFORM 2012-CLEAR-COMPUTER-BOARD
+              PERFORM 2200-SEND-MAP
+           ELSE
+              IF SO-PRESSED-KEY-F5
+                  PERFORM 2020-VALIDATE-PLAYER-INPUT
+                  IF SO-CORRECT-INPUT
+                       PERFORM 2080-CHOOSE-WHO-STARTS
+                       PERFORM 2200-SEND-MAP                 
+                  END-IF
+              ELSE
+                  IF SO-PRESSED-KEY-ENTER AND SO-CORRECT-INPUT
+                    PERFORM 2070-CONTINUE-GAME
+                  END-IF
+              END-IF
+           END-IF
+           .
+      ******************************************************************
+      *                     2012-CLEAR-COMPUTER-BOARD                  *
+      *                                                                *
+      ******************************************************************
+       2012-CLEAR-COMPUTER-BOARD.
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+             PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+                   MOVE ' ' TO FIELDO(2, ROW-INDEX, COL-INDEX)
+             END-PERFORM
+           END-PERFORM
+           .
+      ******************************************************************
+      *                      2070-CONTINUE-GAME                        *
+      *
+      * AFTER ENTER IS PRESSED IT CHECKS WHO STARTS. 
+      * IF PLAYER'S TURN, IT TRANSLATES THE CURRENT CURSOR POSITION AND*
+      * CHECKS IF PLAYER MADE A HIT.
+      * IF COMPUTER'S TURN, IT CJECKS IF ANY ACTIVE SHIP IS OPEN TO    *
+      * SHOOT, IF SO, IT PERFORMS 2720-COMPUTER-ATTACK-CONTINUE,       *
+      * OTHERWISE IT PERFORMS 2710-COMPUTER-RANDOM-SHOT.               *
+      ******************************************************************
+       2070-CONTINUE-GAME.
+            PERFORM 2100-RECEIVE-MAP
+            PERFORM 2210-RESTORE-ATTRIBUTES
+
+            IF SO-PLAYER-STARTS AND WS-WHO-WINS = SPACES
+               PERFORM 2600-TRANSLATE-CURSOR-POSITION
+               IF SO-CURSOR-ON-BOARD-YES
+                   DISPLAY 'PLAYER''S TURN. CORRECT CURSOR POSITION'
+                   PERFORM 2650-CHECK-IF-HIT
+               ELSE
+                   DISPLAY 'WRONG CURSOR POSITION'
+                   MOVE 'PICK A FIELD'         TO OUT1O
+                   MOVE 'WITH MOUSE &'         TO OUT2O
+                   MOVE 'PRESS ENTER '         TO OUT3O
+               END-IF
+            ELSE
+               IF SO-COMPUTER-STARTS AND WS-WHO-WINS = SPACES
+                   DISPLAY 'COMPUTER''S TURN'
+                   IF SO-ACTIVE-SHIP-YES
+                        DISPLAY 'COMPUTER ATTACK'
+                        PERFORM 2720-COMPUTER-ATTACK-CONTINUE
+                   ELSE
+                        DISPLAY 'COMPUTER RANDOM SHOT'
+                        PERFORM 2710-COMPUTER-RANDOM-SHOT
+                   END-IF                 
+               END-IF
+            END-IF
+            DISPLAY 'CURSOR: ' WS-CURSOR-POSITION
+            PERFORM 2201-SEND-MAP-WITH-CURSOR
+           .
+      ******************************************************************
+      *                      2650-CHECK-IF-HIT                         *
+      *
+      * THIS PARAGRAPH CHECKS IF THE PLAYER MADE A HIT. IF SO, IT MARKS
+      * THE FIELD WITH AN 'H' AND SETS FIELD'S STATUS AS 'HIT'.
+      * THEN IT CHECK IF THE CURRENT SHIP IS ALREADY SUNK AND ASK THE  *
+      * PLAYER TO PICK ANOTHER FIELD TO SHOOT. 
+      * IF THE PLAYER DID NOT HIT ANY SHIP, THE FIELD IS IT MARKED AS 
+      * MISSED WITH AN 'O' AND THE TURN SWITCHES TO THE COMPUTER'S TURN.
+      *
+      ******************************************************************      
+       2650-CHECK-IF-HIT.
+           PERFORM VARYING WS-COMP-SHIP-INDEX FROM 1 BY 1 
+                                          UNTIL WS-COMP-SHIP-INDEX > 10
+            IF COMP-UNSUNK(WS-COMP-SHIP-INDEX) 
+              PERFORM VARYING WS-COMP-CELL-INDEX FROM 1 BY 1 UNTIL
+                 WS-COMP-CELL-INDEX > WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                  IF CELL-X(WS-COMP-SHIP-INDEX,WS-COMP-CELL-INDEX) 
+                         = WS-CURSOR-ROW AND 
+                         CELL-Y(WS-COMP-SHIP-INDEX,WS-COMP-CELL-INDEX) 
+                         = WS-CURSOR-COL
+                     SET COMP-HIT(WS-COMP-SHIP-INDEX,WS-COMP-CELL-INDEX)
+                                                                TO TRUE
+                     DISPLAY 'A ship was hit'
+                     MOVE 'H' TO FIELDO(2, WS-CURSOR-ROW, WS-CURSOR-COL)       
+                     MOVE '  YOU HIT!  ' TO OUT1O
+                     MOVE 'PICK FIELD &' TO OUT2O
+                     MOVE 'PRESS ENTER ' TO OUT3O
+                     SET SO-PLAYER-STARTS TO TRUE
+                     PERFORM 2660-CHECK-IF-SUNK
+                     PERFORM 2665-CHECK-IF-PLAYER-WINS
+                     IF PLAYER-WINS
+                         MOVE '  CONGRATS! ' TO OUT1O
+                         MOVE ' PLAYER WINS' TO OUT2O
+                         MOVE '  THE GAME  ' TO OUT3O
+                         DISPLAY 'PLAYER WINS! GAMEOVER'
+                         MOVE DFHBLINK TO OUT1H
+                     END-IF 
+                     EXIT PARAGRAPH 
+                  END-IF
+              END-PERFORM
+            END-IF
+           END-PERFORM
+
+           MOVE 'O' TO FIELDO(2, WS-CURSOR-ROW, WS-CURSOR-COL)
+           DISPLAY 'PLAYER MISSED'
+           SET SO-COMPUTER-STARTS TO TRUE
+           MOVE ' YOU MISSED ' TO OUT1O
+           MOVE ' COMP. TURN ' TO OUT2O
+           MOVE ' PRESS ENTER' TO OUT3O   
+           .
+      ******************************************************************
+      *                    2665-CHECK-IF-PLAYER-WINS                   *
+      *
+      * THIS PARAGRAPH CHECKS IF ANY UNSUNK SIHPS ARE STILL AVAILABLE BY 
+      * THE COMPUTER. IF NOT, CHANGES THE FLAG TO PLAYER-WINS.         *
+      ******************************************************************
+       2665-CHECK-IF-PLAYER-WINS.
+           PERFORM VARYING WS-COMP-SHIP-INDEX FROM 1 BY 1
+                                          UNTIL WS-COMP-SHIP-INDEX > 10
+              IF COMP-UNSUNK(WS-COMP-SHIP-INDEX)
+                 EXIT PARAGRAPH
+              END-IF
+           END-PERFORM   
+           SET PLAYER-WINS TO TRUE
+           .
+      ******************************************************************
+      *                      2660-CHECK-IF-SUNK                        *
+      *
+      * THIS PARAGRAPH CHECKS IF THE PLAYER MADE A SANK. IF SO, THE SHIP
+      * IS MARKED WITH AN 'S' (IS-SUNK) AND THE PLAYER GETS INFO THAT  *
+      * CAN SELECT ANOTHER FIELD TO SHOOT.
+      ******************************************************************
+       2660-CHECK-IF-SUNK.
+           MOVE 0 TO WS-TEMP-HIT-COUNT
+           PERFORM VARYING WS-COMP-CELL-INDEX FROM 1 BY 1 UNTIL
+              WS-COMP-CELL-INDEX > WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+               IF COMP-HIT(WS-COMP-SHIP-INDEX,WS-COMP-CELL-INDEX)
+                    ADD 1 TO WS-TEMP-HIT-COUNT
+               END-IF
+           END-PERFORM
+           IF WS-TEMP-HIT-COUNT = WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+              SET COMP-SUNK(WS-COMP-SHIP-INDEX) TO TRUE
+              PERFORM VARYING WS-COMP-CELL-INDEX FROM 1 BY 1 UNTIL
+                 WS-COMP-CELL-INDEX > WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                   MOVE CELL-X(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+                        TO WS-X-VALUE
+                   MOVE CELL-Y(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+                        TO WS-Y-VALUE
+                   MOVE 'S' TO FIELDO(2, WS-X-VALUE, WS-Y-VALUE)
+                   MOVE DFHYELLO TO FIELDC(2, WS-X-VALUE, WS-Y-VALUE)
+                   MOVE FIELDC(2, WS-X-VALUE, WS-Y-VALUE) TO
+                                       WS-FIELDC(WS-X-VALUE, WS-Y-VALUE)
+
+              END-PERFORM
+              DISPLAY 'Ship sank!'
+              MOVE ' Ship sank! ' TO OUT1O
+              MOVE 'PICK A FIELD' TO OUT2O
+              MOVE '&PRESS ENTER' TO OUT3O
+           END-IF
+           .
+      ******************************************************************
+      *                  2710-COMPUTER-RANDOM-SHOT                     * 
+      *                                                                *
+      * THIS PARAGRAPH PERFORMS THE COORDINATES GENERATION FOR COMPUTER*
+      * MOVE, BASED ON RANDOM NUMBERS GENERATRION.                     *
+      * IF THE CHOSEN FIELD WAS NOT VISITED YET, A SHOT IS MADE AND    * 
+      * IF HIT OCCURS, COMPUTER CONTINUES THE SHIP ATTACK. IF NO HIT,  *
+      * COMPUTER LET THE PLAYER TO CONTINUE.                           *
+      * IF GENERATED POSITION WAS ALREADY VISITED, IT MUST LOOK FOR    *
+      * ANOTHER RANDOM POSITION.                                       *
+      ******************************************************************
+       2710-COMPUTER-RANDOM-SHOT.                  
+           PERFORM 2096-GENERATE-RANDOM-POSITION
+              IF SO-VISITED(ROW-START, COL-START)
+                 PERFORM UNTIL SO-NOT-VISITED(ROW-START, COL-START)
+                    Add 1 TO WS-CURRENT-SHOT-NUMBER
+                    MOVE WS-CURRENT-SHOT-NUMBER TO WS-CURRENT-RUN
+                    PERFORM 2096-GENERATE-RANDOM-POSITION
+                 END-PERFORM
+              END-IF
+
+              SET SO-VISITED(ROW-START, COL-START) TO TRUE
+              DISPLAY 'CURRENT-SHOT-NUMBER ' WS-CURRENT-SHOT-NUMBER
+              PERFORM 2715-IF-COMPUTER-MADE-HIT
+
+              PERFORM 2735-NUM-COL-TO-ANUM 
+
+              IF SO-PLAYER-STARTS
+                   MOVE 'COMP. MISSED' TO OUT1O
+                   MOVE 'PICK FIELD &' TO OUT2O
+                   MOVE 'PRESS ENTER ' TO OUT3O
+
+                   DISPLAY 'COMPUTER MISSED! ' COL-START-ANUM ', ' 
+                   ROW-START
+              ELSE
+                   MOVE SPACES TO HIT-COORD
+                   STRING '   ' DELIMITED BY SIZE 
+                          COL-START-ANUM DELIMITED BY SIZE 
+                          ' ' DELIMITED BY SIZE
+                          ROW-START DELIMITED BY SIZE
+                   INTO HIT-COORD
+                   MOVE 'COMPUTER HIT' TO OUT1O
+                   MOVE HIT-COORD      TO OUT2O
+                   MOVE ' PRESS ENTER' TO OUT3O
+
+                   DISPLAY 'COMPUTER HIT A SHIP! ' HIT-COORD
+              END-IF
+           .
+      ******************************************************************
+      *                  2715-IF-COMPUTER-MADE-HIT                     * 
+      *                                                                *
+      * THIS PARAGRAPH CHECKS IF THE COMPUTER MADE A HIT. IF SO, IT SETS
+      * THE CHANGES THE STATUS OF THE FIELD TO 'HIT' AND MOVES H TO THE*
+      * FIELD ON THE MAP, INDICATING THAT THE FIELD WAS HIT.           *
+      * IF THE SHIP IS NOT SUNK YET, MEANS THE STATUS OF THE SHIP IS:  *
+      * SO-ACTIVE-SHIP-YES, THEN IT SAVES THE COORDINATES OF THE MOVE TO 
+      * THE COMP-LAST-HIT-STATUS.
+      * IF NO ANY ACTIVE SHIP EXISTS, RESETS THE LAST HIT STATUS.      *
+      * IF COMPUTER MADE NO HIT, IT LET THE PLAYER TO CONTINUE.        *
+      ******************************************************************   
+       2715-IF-COMPUTER-MADE-HIT.
+           PERFORM VARYING WS-PL-SHIP-INDEX FROM 1 BY 1
+                                            UNTIL WS-PL-SHIP-INDEX > 10
+               IF PL-UNSUNK(WS-PL-SHIP-INDEX)
+                  PERFORM VARYING WS-PL-CELL-INDEX FROM 1 BY 1 UNTIL
+                  WS-PL-CELL-INDEX > WS-PL-SHIP-LENGTH(WS-PL-SHIP-INDEX)
+                    IF PL-CELL-X(WS-PL-SHIP-INDEX, WS-PL-CELL-INDEX) =
+                       ROW-START AND
+                       PL-CELL-Y(WS-PL-SHIP-INDEX, WS-PL-CELL-INDEX) =
+                       COL-START
+                           SET PL-HIT(WS-PL-SHIP-INDEX,WS-PL-CELL-INDEX)
+                                                              TO TRUE          
+                           MOVE 'H' TO
+                              FIELDO(1, ROW-START, COL-START)
+
+                           PERFORM 2725-IF-COMPUTER-MADE-SUNK
+                           SET SO-COMPUTER-STARTS TO TRUE
+                           IF SO-ACTIVE-SHIP-YES
+                               MOVE ROW-START TO HIT-ROW-VALUE
+                               MOVE COL-START TO HIT-COL-VALUE
+                           ELSE
+                               PERFORM 2730-CHECK-IF-COMPUTER-WINS
+
+                               MOVE 0 TO HIT-ROW-VALUE
+                               MOVE 0 TO HIT-COL-VALUE
+                               MOVE SPACES TO HIT-DIRECTION
+                           END-IF
+                           EXIT PARAGRAPH
+                    END-IF
+                  END-PERFORM
+               END-IF
+           END-PERFORM
+                               
+           SET SO-PLAYER-STARTS TO TRUE
+           .
+      ******************************************************************
+      *                      2735-NUM-COL-TO-ANUM                      * 
+      ******************************************************************
+       2735-NUM-COL-TO-ANUM.
+           MOVE SPACES TO COL-START-ANUM
+           EVALUATE COL-START
+              WHEN 1
+                 MOVE 'A' TO COL-START-ANUM
+              WHEN 2
+                 MOVE 'B' TO COL-START-ANUM       
+              WHEN 3
+                 MOVE 'C' TO COL-START-ANUM
+              WHEN 4
+                 MOVE 'D' TO COL-START-ANUM 
+              WHEN 5
+                 MOVE 'E' TO COL-START-ANUM
+              WHEN 6
+                 MOVE 'F' TO COL-START-ANUM 
+              WHEN 7
+                 MOVE 'G' TO COL-START-ANUM
+              WHEN 8
+                 MOVE 'H' TO COL-START-ANUM 
+              WHEN 9
+                 MOVE 'I' TO COL-START-ANUM
+              WHEN 10
+                 MOVE 'J' TO COL-START-ANUM 
+              WHEN OTHER
+                 DISPLAY 'WRONG COL NUMBER!'          
+           END-EVALUATE
+           .
+      ******************************************************************
+      *                  2725-IF-COMPUTER-MADE-SUNK                    * 
+      *
+      * THIS PARAGRAPH CHECKS IF COMPUTER SANK A SHIP. IF SO, THE SHIP *
+      * IS MARKED WITH S (IS-SUNK) AND ALL FIELDS AROUND, EXCEPT THE   *
+      * DIAGONAL FIRLDS, ARE MARKED AS VISITED, BECAUSE SHIPS CANNOT   *
+      * TOUCH EACH OTHER VERTICALLY OR HORIZONTALLY.                   *
+      * IF THE SHIP IS SUNK THEN WS-ACTIVE-SHIP CHANGES STATUS TO      *
+      * SO-ACTIVE-SHIP-NO, OTHERWISE THE STATUS IS SO-ACTIVE-SHIP-YES. *
+      ******************************************************************
+       2725-IF-COMPUTER-MADE-SUNK.
+           MOVE 0 TO WS-TEMP-HIT-COUNT
+           PERFORM VARYING WS-PL-CELL-INDEX FROM 1 BY 1 UNTIL
+             WS-PL-CELL-INDEX > WS-PL-SHIP-LENGTH(WS-PL-SHIP-INDEX)
+               IF PL-HIT(WS-PL-SHIP-INDEX, WS-PL-CELL-INDEX)
+                    ADD 1 TO WS-TEMP-HIT-COUNT
+               END-IF
+           END-PERFORM
+           IF WS-TEMP-HIT-COUNT = WS-PL-SHIP-LENGTH(WS-PL-SHIP-INDEX)
+              SET PL-SUNK(WS-PL-SHIP-INDEX) TO TRUE
+              PERFORM VARYING WS-PL-CELL-INDEX FROM 1 BY 1 UNTIL
+              WS-PL-CELL-INDEX > WS-PL-SHIP-LENGTH(WS-PL-SHIP-INDEX)
+                  MOVE PL-CELL-X(WS-PL-SHIP-INDEX,WS-PL-CELL-INDEX)
+                        TO WS-X-VALUE
+                  MOVE  PL-CELL-Y(WS-PL-SHIP-INDEX,WS-PL-CELL-INDEX)
+                        TO WS-Y-VALUE
+                  MOVE 'S' TO FIELDO(1,WS-X-VALUE, WS-Y-VALUE)
+
+                  IF (WS-X-VALUE + 1) <= 10 AND (WS-X-VALUE - 1) >= 1
+                    AND (WS-Y-VALUE + 1) <= 10 AND (WS-Y-VALUE - 1) >= 1
+                        SET SO-VISITED(WS-X-VALUE + 1, WS-Y-VALUE)
+                                                            TO TRUE
+                        SET SO-VISITED(WS-X-VALUE - 1, WS-Y-VALUE)
+                                                            TO TRUE
+                        SET SO-VISITED(WS-X-VALUE, WS-Y-VALUE + 1)
+                                                            TO TRUE
+                        SET SO-VISITED(WS-X-VALUE, WS-X-VALUE - 1)
+                                                            TO TRUE
+                  END-IF
+              END-PERFORM
+              DISPLAY 'SHIP SANK!'
+              SET SO-ACTIVE-SHIP-NO TO TRUE
+           ELSE
+              SET SO-ACTIVE-SHIP-YES TO TRUE
+           END-IF
+           .
+      ******************************************************************
+      *                    2730-CHECK-IF-COMPUTER-WINS                 *
+      *
+      * THIS PARAGRAPH CHECKS IF ANY UNSUNK SIHPS ARE STILL AVAILABLE BY 
+      * THE PLAYER. IF NOT, CHANGES THE FLAG TO COMPUTER-WINS.         *
+      ******************************************************************
+       2730-CHECK-IF-COMPUTER-WINS.
+           PERFORM VARYING WS-PL-SHIP-INDEX FROM 1 BY 1
+                                            UNTIL WS-PL-SHIP-INDEX > 10
+              IF PL-UNSUNK(WS-PL-SHIP-INDEX)
+                 EXIT PARAGRAPH
+              END-IF
+           END-PERFORM   
+           SET COMPUTER-WINS TO TRUE
+           .
+      ******************************************************************
+      *                  2720-COMPUTER-ATTACK-CONTINUE                 *
+      *
+      * THIS PARAGRAPH CHECKS THE COMP-LAST-HIT-STATUS AND IF DIRECTION*
+      * WAS NOT SET, MEANING THAT SHIP WAS JUST FOR ONE TIME HIT, THE  *
+      * DIRECTION IS SET TO THE RIGHT (IF POSSIBLE) OR LEFT.
+      * IF COMPUTER GOES RIGHT, 1 IS ADDED TO THE COLUMN COORDINATE.
+      * IF COMPUTER GOES LEFT, 1 IS SUBTRACTED FROM THE COLUMN COORDIN.*
+      * IF COMPUTER GOES DOWN, 1 IS ADDED TO THE COLUMN COORDINATE.    *
+      * IF COMPUTER GOES UP, 1 IS SUBTRACTED FROM THE COLUMN COORDINATE*
+      * THEN IT PERFORMS A CHECK, IF-COMPUTER-MADE-HIT WITH THE NEW    *
+      * COORDINATES. IF YES, THEN CHECKS IF AN ACTIVE SHIP IS OPEN AND *
+      * PERFORMS 2720-COMPUTER-ATTACK-CONTINUE; IF THE SHIP WAS SUNK,  *
+      * THEN PERFORMS 2710-COMPUTER-RANDOM-SHOT, LOOKING FOR ANOTHER   *
+      * SHIP. IF NO HIT WAS MADE, THE TURN IS CHANGING TO THE PLAYER.  *
+      ******************************************************************
+       2720-COMPUTER-ATTACK-CONTINUE.
+           MOVE HIT-COL-VALUE TO COL-START
+           MOVE HIT-ROW-VALUE TO ROW-START
+           MOVE COL-START TO CALCULATED-COL
+           SUBTRACT 1 FROM CALCULATED-COL
+           DISPLAY 'Row,Col,Prev.Cel,Dir ' ROW-START ', ' COL-START ', '
+                                FIELDI(1, ROW-START, CALCULATED-COL) 
+                                ', ' HIT-DIRECTION 
+
+           EVALUATE HIT-DIRECTION   
+                 WHEN 'R'
+                      IF COL-START < 10 AND
+                                SO-NOT-VISITED(ROW-START, COL-START + 1)
+                            ADD 1 TO COL-START
+                      ELSE
+                            IF COL-START > 1 AND 
+                                SO-NOT-VISITED(ROW-START, COL-START - 1)
+                                 SET IS-LEFT TO TRUE
+                                 SUBTRACT 1 FROM COL-START
+                            ELSE
+                                 IF COL-START > 1 AND 
+                                FIELDI(1, ROW-START, CALCULATED-COL)='H'
+                                    SET IS-LEFT TO TRUE
+                                    PERFORM UNTIL 
+                                    SO-NOT-VISITED(ROW-START, COL-START)
+                                        SUBTRACT 1 FROM COL-START 
+                                    END-PERFORM
+                                 ELSE
+                                     IF ROW-START < 10 AND 
+                                SO-NOT-VISITED(ROW-START + 1, COL-START)
+                                        SET IS-DOWN TO TRUE
+                                        ADD 1 TO ROW-START
+                                     ELSE
+                                        SET IS-UP TO TRUE
+                                        SUBTRACT 1 FROM ROW-START
+                                     END-IF
+                                 END-IF
+                            END-IF  
+                      END-IF
+                 WHEN 'L'
+                   IF COL-START > 1 AND
+                     SO-NOT-VISITED(ROW-START, COL-START - 1)
+                         SUBTRACT 1 FROM COL-START
+                   ELSE
+                      IF ROW-START < 10 AND
+                      SO-NOT-VISITED(ROW-START + 1, COL-START)
+                         SET IS-DOWN TO TRUE
+                         ADD 1 TO ROW-START
+                      ELSE
+                         SET IS-UP TO TRUE
+                         SUBTRACT 1 FROM ROW-START
+                      END-IF
+                   END-IF
+                 WHEN 'D'
+                    IF ROW-START < 10 AND
+                       SO-NOT-VISITED(ROW-START + 1, COL-START)
+                         ADD 1 TO ROW-START
+                    ELSE
+                         SET IS-UP TO TRUE
+                         PERFORM UNTIL 
+                           SO-NOT-VISITED(ROW-START, COL-START)
+                              SUBTRACT 1 FROM ROW-START 
+                         END-PERFORM
+                    END-IF
+                 WHEN 'U'
+                    IF ROW-START > 1 
+      *              AND SO-NOT-VISITED(ROW-START - 1, COL-START)
+                         SUBTRACT 1 FROM ROW-START
+                    END-IF
+                 WHEN OTHER
+                    IF COL-START < 10
+                        SET IS-RIGHT TO TRUE
+                        ADD 1 TO COL-START
+                    ELSE
+                        SET IS-LEFT TO TRUE
+                        SUBTRACT 1 FROM COL-START
+                    END-IF
+           END-EVALUATE
+
+           DISPLAY 'ROW, COL, DIR: ' ROW-START ', ' COL-START ', '
+           HIT-DIRECTION
+           SET SO-VISITED(ROW-START, COL-START) TO TRUE
+           PERFORM 2715-IF-COMPUTER-MADE-HIT
+
+           PERFORM 2735-NUM-COL-TO-ANUM 
+
+           IF SO-PLAYER-STARTS
+               MOVE 'PICK A FIELD' TO OUT1O
+               MOVE '  AND PRESS ' TO OUT2O
+               MOVE '    ENTER   ' TO OUT3O
+               DISPLAY 'COMPUTER MISSED! ' COL-START-ANUM ', ' 
+               ROW-START
+           ELSE
+               IF COMPUTER-WINS
+                  MOVE '  CONGRATS! ' TO OUT1O
+                  MOVE '  COMPUTER  ' TO OUT2O
+                  MOVE '    WINS    ' TO OUT3O
+                  DISPLAY 'COMPUTER WINS! GAMEOVER'
+                  MOVE DFHBLINK TO OUT1H
+               ELSE
+                  MOVE SPACES TO HIT-COORD
+                  STRING '   ' DELIMITED BY SIZE 
+                          COL-START-ANUM DELIMITED BY SIZE 
+                          ' ' DELIMITED BY SIZE
+                          ROW-START DELIMITED BY SIZE
+                  INTO HIT-COORD
+                  MOVE 'COMPUTER HIT' TO OUT1O
+                  MOVE HIT-COORD      TO OUT2O
+                  MOVE 'PRESS ENTER ' TO OUT3O
+
+                  DISPLAY 'COMPUTER HIT A SHIP! ' HIT-COORD
+               END-IF
+           END-IF
+           .
+      ******************************************************************
+      *                     2020-VALIDATE-PLAYER-INPUT                 *
+      *
+      * THIS PARAGRAPH VALIDATES THE PLAYER SHIP DISTRIBUTION. 
+      * IF INPUT IS CORRECT UPDATES THE FIELDS ATTRIBUTES AND SEND THE *
+      * MAP TO THE TERMINAL BACK.                                      *
+      ******************************************************************
+       2020-VALIDATE-PLAYER-INPUT.
+           PERFORM 2100-RECEIVE-MAP
+           PERFORM 2015-DISPLAY-PLAYER-BOARD
+           PERFORM 2025-IF-ENTRY-CORRECT
+      
+           IF SO-CORRECT-INPUT
+      *        PERFORM 2205-UPDATE-ATTRIBUTES
+              PERFORM 2250-STORE-SHIPS
+           END-IF
+           PERFORM 2200-SEND-MAP
+           .
+      ******************************************************************
+      *                        2250-STORE-SHIPS                        *
+      *
+      * THIS PARAGRAPH IDENTIFIES AND STORES THE PLAYER'S SHIP DATA IN *
+      * THE WS-PLAYER-SHIPS STRUCTURE. IT ITERATES OVER THE GAME BOARD *
+      * TO DETECT HORIZONTALLY AND VERTICALLY ALIGNED 'X' MARKERS      *
+      * REPRESENTING SHIPS, RECORDING THEIR COORDINATES, LENGTHS, AND  *
+      * IF-HIT ATTRIBUTES. DETECTED SHIPS ARE UNIQUELY IDENTIFIED, AND *
+      * THEIR DETAILS ARE STORED FOR FURTHER PROCESSING. FINALLY, THE  *
+      * SHIP DATA IS DISPLAYED FOR DEBUGGING OR VERIFICATION PURPOSES. *
+      ******************************************************************
+       2250-STORE-SHIPS.
+      * FIRST CHECK HORIZONTALLY, COUNT ONLY THOSE FIELDS THAT HAVE AT  
+      * LEAST 2 CONSECUTIVE 'X's. IF THE FIELD IS EMPTY OR IT IS THE END
+      * OF A LINE, THEN CHECK WHETHER AT LEAST THE PREVIOUS 2 FIELDS ARE 
+      * MARKED WITH 'X' AND IF SO, WRITE DOWN THEIR COORDINATES.
+           MOVE 1 TO WS-SHIP-COUNTER
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+              MOVE 0 TO WS-FIELD-COUNTER
+              PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+                 IF (FIELDI(1, ROW-INDEX, COL-INDEX) = 'X' AND
+                     COL-INDEX = 1 AND
+                     FIELDI(1, ROW-INDEX, COL-INDEX + 1) = 'X') OR
+                    (FIELDI(1, ROW-INDEX, COL-INDEX) = 'X' AND
+                     COL-INDEX = 10 AND
+                     FIELDI(1, ROW-INDEX, COL-INDEX - 1) = 'X') OR
+                    (FIELDI(1, ROW-INDEX, COL-INDEX) = 'X' AND
+                     COL-INDEX > 1 AND COL-INDEX < 10 AND
+                     (FIELDI(1, ROW-INDEX, COL-INDEX - 1) = 'X' OR
+                     FIELDI(1, ROW-INDEX, COL-INDEX + 1) = 'X'))
+                       ADD 1 TO WS-FIELD-COUNTER
+                       MOVE ROW-INDEX TO
+                          PL-CELL-X(WS-SHIP-COUNTER,WS-FIELD-COUNTER)
+                       MOVE COL-INDEX TO
+                          PL-CELL-Y(WS-SHIP-COUNTER,WS-FIELD-COUNTER)
+                       MOVE 'N' TO
+                          PL-CELL-HIT(WS-SHIP-COUNTER,WS-FIELD-COUNTER)
+                       IF COL-INDEX = 10
+                           MOVE WS-FIELD-COUNTER TO
+                                     WS-PL-SHIP-LENGTH(WS-SHIP-COUNTER)
+                           MOVE WS-SHIP-COUNTER TO
+                                     WS-PL-SHIP-ID(WS-SHIP-COUNTER)
+                           ADD 1 TO WS-SHIP-COUNTER
+                       END-IF
+                 ELSE
+                    IF FIELDI(1, ROW-INDEX, COL-INDEX) = ' ' AND
+                          COL-INDEX > 2 AND
+                          FIELDI(1, ROW-INDEX, COL-INDEX - 1) = 'X' AND
+                          FIELDI(1, ROW-INDEX, COL-INDEX - 2) = 'X'
+                        MOVE WS-FIELD-COUNTER TO
+                                     WS-PL-SHIP-LENGTH(WS-SHIP-COUNTER)
+                        MOVE WS-SHIP-COUNTER TO
+                                     WS-PL-SHIP-ID(WS-SHIP-COUNTER)
+                        MOVE 0 TO WS-FIELD-COUNTER
+                        ADD 1 TO WS-SHIP-COUNTER
+                    END-IF
+                 END-IF
+              END-PERFORM
+           END-PERFORM
+
+      * THEN CHECK VERTICALLY, SAME LOGIC LIKE FOR HORIZONTAL COUNT
+           PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+              MOVE 0 TO WS-FIELD-COUNTER
+              PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+                 IF (FIELDI(1, ROW-INDEX, COL-INDEX) = 'X' AND
+                    ROW-INDEX = 1 AND
+                    FIELDI(1, ROW-INDEX + 1, COL-INDEX) = 'X') OR
+                    (FIELDI(1, ROW-INDEX, COL-INDEX) = 'X' AND
+                    ROW-INDEX = 10 AND
+                    FIELDI(1, ROW-INDEX - 1, COL-INDEX) = 'X') OR
+                    (FIELDI(1, ROW-INDEX, COL-INDEX) = 'X' AND
+                    ROW-INDEX > 1 AND ROW-INDEX < 10 AND
+                    (FIELDI(1, ROW-INDEX - 1, COL-INDEX) = 'X' OR
+                    FIELDI(1, ROW-INDEX + 1, COL-INDEX) = 'X'))
+                       ADD 1 TO WS-FIELD-COUNTER
+                       MOVE ROW-INDEX TO
+                          PL-CELL-X(WS-SHIP-COUNTER,WS-FIELD-COUNTER)
+                       MOVE COL-INDEX TO
+                          PL-CELL-Y(WS-SHIP-COUNTER,WS-FIELD-COUNTER)
+                       MOVE 'N' TO
+                          PL-CELL-HIT(WS-SHIP-COUNTER,WS-FIELD-COUNTER)
+                       IF ROW-INDEX = 10
+                           MOVE WS-FIELD-COUNTER TO
+                                     WS-PL-SHIP-LENGTH(WS-SHIP-COUNTER)
+                           MOVE WS-SHIP-COUNTER TO
+                                     WS-PL-SHIP-ID(WS-SHIP-COUNTER)
+                           ADD 1 TO WS-SHIP-COUNTER
+                       END-IF
+                 ELSE
+                     IF FIELDI(1, ROW-INDEX, COL-INDEX) = ' ' AND
+                           ROW-INDEX > 2 AND
+                           FIELDI(1, ROW-INDEX - 1,COL-INDEX) = 'X' AND
+                           FIELDI(1, ROW-INDEX - 2,COL-INDEX) = 'X'
+                        MOVE WS-FIELD-COUNTER TO
+                                     WS-PL-SHIP-LENGTH(WS-SHIP-COUNTER)
+                        MOVE WS-SHIP-COUNTER TO
+                                     WS-PL-SHIP-ID(WS-SHIP-COUNTER)
+                        MOVE 0 TO WS-FIELD-COUNTER
+                        ADD 1 TO WS-SHIP-COUNTER
+                     END-IF
+                 END-IF
+              END-PERFORM
+           END-PERFORM
+
+           PERFORM VARYING WS-PL-SHIP-INDEX FROM 1 BY 1
+                                            UNTIL WS-PL-SHIP-INDEX > 10
+               PERFORM VARYING WS-PL-CELL-INDEX FROM 1 BY 1 UNTIL
+                  WS-PL-CELL-INDEX > WS-PL-SHIP-LENGTH(WS-PL-SHIP-INDEX)
+      *              DISPLAY 'Length,ID,ROW,COL,IF-HIT: '
+      *                   WS-PL-SHIP-LENGTH(WS-PL-SHIP-INDEX)
+      *             ', ' WS-PL-SHIP-ID(WS-PL-SHIP-INDEX)
+      *             ', ' PL-CELL-X(WS-PL-SHIP-INDEX, WS-PL-CELL-INDEX)
+      *             ', ' PL-CELL-Y(WS-PL-SHIP-INDEX, WS-PL-CELL-INDEX)
+      *             ', ' PL-CELL-HIT(WS-PL-SHIP-INDEX, WS-PL-CELL-INDEX)
+               END-PERFORM
+           END-PERFORM
+           .
+      ******************************************************************
+      *                      2205-UPDATE-ATTRIBUTES                    *
+      *
+      * THIS PARAGRAPH UPDATES THE ATTRIBUTES OF THE GAME BOARD.       *
+      * IT ITERATES THROUGH ALL ROWS AND COLUMNS, CHECKING FOR CELLS   *
+      * MARKED WITH 'X'. FOR SUCH CELLS, IT ASSIGNS A SPECIFIC VALUE   *
+      * (DFHTURQ) TO FIELDC. ALL CELLS ARE UPDATED WITH DFHBMPRO IN    *
+      * FIELDA. THE UPDATED VALUES FROM FIELDA AND FIELDC ARE THEN     *
+      * COPIED TO THE WORKING-STORAGE FIELDS WS-FIELDA AND WS-FIELDC   *
+      * FOR FURTHER PROCESSING.
+      ******************************************************************
+       2205-UPDATE-ATTRIBUTES.
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+              PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+                 IF FIELDI(1,ROW-INDEX, COL-INDEX) = 'X'
+      *            MOVE X'30' TO FIELDA(1,ROW-INDEX, COL-INDEX)
+                 MOVE DFHTURQ TO FIELDC(1,ROW-INDEX, COL-INDEX)
+                 END-IF
+                 MOVE DFHBMPRO TO FIELDA(1,ROW-INDEX, COL-INDEX)
+
+                 MOVE FIELDA(1, ROW-INDEX, COL-INDEX) TO
+                                       WS-FIELDA(ROW-INDEX, COL-INDEX)
+                 MOVE FIELDC(1, ROW-INDEX, COL-INDEX) TO
+                                       WS-FIELDC(ROW-INDEX, COL-INDEX)
+      *           DISPLAY '1.ATTR: ' WS-FIELDA(ROW-INDEX, COL-INDEX)
+      *           DISPLAY '1.COL: '  WS-FIELDC(ROW-INDEX, COL-INDEX)
+              END-PERFORM
+           END-PERFORM
+           .
+      ******************************************************************
+      *                    2210-RESTORE-ATTRIBUTES                     *
+      *
+      * THIS PARAGRAPH RESTORES THE PREVIOUSLY SAVED ATTRIBUTES OF THE *
+      * GAME BOARD. IT ITERATES THROUGH ALL ROWS AND COLUMNS, COPYING  *
+      * THE VALUES FROM WS-FIELDA AND WS-FIELDC BACK TO THE FIELDA AND *
+      * FIELDC. THIS PROCESS ENSURES THAT THE DISPLAY ATTRIBUTES (SUCH *
+      * AS COLORS OR HIGHLIGHTS) ARE REINSTATED AFTER TEMPORARY        *
+      * MODIFICATIONS, SINCE THESE ATTRIBUTES ARE NOT PRESERVED BY THE *
+      * RECEIVE MAP COMMAND.                                           *
+      ******************************************************************
+       2210-RESTORE-ATTRIBUTES.
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+              PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+      *             MOVE WS-FIELDA(ROW-INDEX, COL-INDEX) TO
+      *                            FIELDA(1, ROW-INDEX, COL-INDEX)
+                   MOVE WS-FIELDC(ROW-INDEX, COL-INDEX) TO
+                                  FIELDC(2, ROW-INDEX, COL-INDEX)
+      *             DISPLAY '2.ATTR: ' WS-FIELDA(ROW-INDEX, COL-INDEX)
+      *             DISPLAY '2.COL: '  WS-FIELDC(ROW-INDEX, COL-INDEX)
+              END-PERFORM
+           END-PERFORM
+           .
+      ******************************************************************
+      *                      2015-DISPLAY-PLAYER-BOARD                 *
+      *
+      * THIS PARAGRAPH DISPLAYS THE PLAYER'S GAME BOARD TO THE LOGS.   *
+      ******************************************************************
+       2015-DISPLAY-PLAYER-BOARD.
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+              MOVE SPACES TO DISPLAY-LINE
+              MOVE 1 TO LINE-POSITION
+              PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+                   STRING FIELDI(1, ROW-INDEX, COL-INDEX) 
+                   DELIMITED BY SIZE
+                          INTO DISPLAY-LINE
+                   WITH POINTER LINE-POSITION
+              END-PERFORM
+              DISPLAY DISPLAY-LINE
+           END-PERFORM
+           .
+      ******************************************************************
+      *                    2025-IF-ENTRY-CORRECT                       *
+      *
+      * THIS PARAGRAPH VALIDATES THE PLAYER'S INPUT FOR CORRECTNESS. IT*
+      * INITIALIZES RELEVANT WORKING-STORAGE VARIABLES AND ASSUMES THE *
+      * INPUT IS CORRECT (SO-CORRECT-INPUT SET TO TRUE). THEN IT       *
+      * PERFORMS TWO CHECKS: A HORIZONTAL FOLLOWED BY A VERTICAL CHECK.*
+      * HORIZONTAL CHECK: ITERATES THROUGH ROWS-COLS TO IDENTIFY SHIPS *
+      * BY DETECTING CONTIGUOUS CELLS MARKED WITH 'X'. FOR EACH SHIP   *
+      * FOUND, IT CALCULATES THE SIZE AND CALLS 2030-EVALUATE-SIZE TO  *
+      * VALIDATE SHIP LENGTHS WHEN NECESSARY.
+      * VERTICAL CHECK: SIMILARLY AS THE HORIZONTAL, BUT ITERATION IS  *
+      * THROUGH COLS-ROWS.
+      * FINAL VALIDATION: AFTER COMPLETING BOTH CHECKS, IT PERFORMS    *
+      * 2040-VALIDATE-COUNTS TO ENSURE THE NUMBER OF SHIPS AND THEIR   *
+      * SIZES MATCH EXPECTATIONS.
+      * ANY ERRORS IDENTIFIED DURING VALIDATION WILL RESULT IN         *
+      * SO-INCORRECT-INPUT BEING SET, INDICATING INVALID INPUT.        *
+      ******************************************************************
+      * IF THE INPUT IS NOT-CORRECT RETURN AN ERROR.
+       2025-IF-ENTRY-CORRECT.
+           MOVE 0 TO WS-2 WS-3 WS-4 WS-5
+                     WS-CURRENT-SHIP-SIZE 
+                     WS-SHIP-AMOUNT
+           SET SO-CORRECT-INPUT TO TRUE
+      * Horizonthal check
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+                  OR SO-INCORRECT-INPUT
+              PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+                  OR SO-INCORRECT-INPUT
+                IF COL-INDEX = 1
+                       MOVE 0 TO WS-CURRENT-SHIP-SIZE
+                END-IF
+                IF FIELDI(1, ROW-INDEX, COL-INDEX) = 'X'
+                       ADD 1 TO WS-CURRENT-SHIP-SIZE
+                       ADD 1 TO WS-SHIP-AMOUNT
+                       if col-index = 10 and WS-CURRENT-SHIP-SIZE > 1
+                           DISPLAY 'SIZE ' WS-CURRENT-SHIP-SIZE
+                           PERFORM 2030-EVALUATE-SIZE
+                       end-if
+                ELSE
+                    IF WS-CURRENT-SHIP-SIZE > 1
+                       DISPLAY 'SIZE ' WS-CURRENT-SHIP-SIZE
+                       PERFORM 2030-EVALUATE-SIZE
+                       MOVE 0 TO WS-CURRENT-SHIP-SIZE
+                    ELSE
+                       MOVE 0 TO WS-CURRENT-SHIP-SIZE
+                    END-IF
+                END-IF
+              END-PERFORM
+           END-PERFORM
+
+      * Vertical check
+           PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+                  OR SO-INCORRECT-INPUT
+              PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+                  OR SO-INCORRECT-INPUT
+                IF ROW-INDEX = 1
+                       MOVE 0 TO WS-CURRENT-SHIP-SIZE
+                END-IF
+                IF FIELDI(1, ROW-INDEX, COL-INDEX) = 'X'
+                       ADD 1 TO WS-CURRENT-SHIP-SIZE
+                       if row-index = 10 and WS-CURRENT-SHIP-SIZE > 1
+                         DISPLAY 'SIZE ' WS-CURRENT-SHIP-SIZE
+                         PERFORM 2030-EVALUATE-SIZE
+                       end-if
+                ELSE
+                    IF WS-CURRENT-SHIP-SIZE > 1
+                       DISPLAY 'SIZE ' WS-CURRENT-SHIP-SIZE
+                       PERFORM 2030-EVALUATE-SIZE
+                       MOVE 0 TO WS-CURRENT-SHIP-SIZE
+                    else
+                       MOVE 0 TO WS-CURRENT-SHIP-SIZE
+                    END-IF
+                END-IF
+              END-PERFORM
+           END-PERFORM
+
+           PERFORM 2040-VALIDATE-COUNTS
+           .
+      ******************************************************************
+      *                      2040-VALIDATE-COUNTS                      *
+      *
+      * THIS PARAGRAPH ENSURES THE PLAYER’S INPUT IS CORRECT BY VERIFY-*
+      * -ING SHIP SIZES AND TOTAL COUNT. IF VALIDATION FAILS, IT SETS AN
+      * ERROR FLAG, DISPLAYS ERROR MESSAGES, AND LOGS THE ISSUE;       *
+      * OTHERWISE, IT CONFIRMS THE INPUT AS VALID.                     *
+      ******************************************************************
+       2040-VALIDATE-COUNTS.
+           display 'ws-2 - ws-5 ' WS-2 ', ' WS-3 ', ' WS-4 ', ' WS-5
+           display 'total size ' WS-SHIP-AMOUNT
+           IF  WS-2 NOT = 4 OR
+               WS-3 NOT = 3 OR
+               WS-4 NOT = 2 OR
+               WS-5 NOT = 1 OR
+               WS-SHIP-AMOUNT NOT = 30
+                       SET SO-INCORRECT-INPUT TO TRUE
+                       MOVE 'WRONG INPUT!'            TO OUT1O
+                       MOVE 'RELOCATE AND'            TO OUT2O
+                       MOVE '  PRESS F5  '            TO OUT3O
+                       DISPLAY 'INVALID INPUT WAS GIVEN BY PLAYER!'
+            ELSE
+                       SET SO-CORRECT-INPUT TO TRUE
+                       DISPLAY 'PLAYER INPUT IS VALID'
+           END-IF.
+      ******************************************************************
+      *                      2030-EVALUATE-SIZE                        *
+      *
+      * THIS PARAGRAPH EVALUATES THE SIZE OF THE CURRENT SHIP AND      *
+      * INCREMENTS THE APPROPRIATE COUNTER (WS-2, WS-3, WS-4, OR WS-5),*
+      * BASED ON THE SHIP'S SIZE. IF THE SIZE IS NOT 2, 3, 4, OR 5, IT *
+      * SETS AN ERROR FLAG (SO-INCORRECT-INPUT).                       *
+      ******************************************************************
+       2030-EVALUATE-SIZE.
+           EVALUATE WS-CURRENT-SHIP-SIZE
+              WHEN 2 ADD 1 TO WS-2
+              WHEN 3 ADD 1 TO WS-3
+              WHEN 4 ADD 1 TO WS-4
+              WHEN 5 ADD 1 TO WS-5
+              WHEN OTHER SET SO-INCORRECT-INPUT TO TRUE
+           END-EVALUATE.
+      ******************************************************************
+      *                      2080-CHOOSE-WHO-STARTS                    *
+      *
+      * THE PARAGRAPH DETERMINES WHO STARTS THE GAME: PLAYER OR COMPUTER
+      * BY GENERATING A RANDOM NUMBER BASED ON THE SYSTEM TIME. IT SETS*
+      * FLAGS (SO-COMPUTER-STARTS OR SO-PLAYER-STARTS) AND DISPLAYS    *
+      * APPROPRIATE INSTRUCTIONS BASED ON THE RESULT.                  *
+      ******************************************************************
+       2080-CHOOSE-WHO-STARTS.
+      * Use time as a seed
+           ACCEPT WS-SEED FROM TIME
+      
+           COMPUTE RANDOM-NUMBER = FUNCTION RANDOM (WS-SEED) * 10
+           COMPUTE RANDOM-INTEGER = FUNCTION MOD(
+                             FUNCTION INTEGER(RANDOM-NUMBER), 2)
+      *    DISPLAY 'Seed: ' WS-SEED
+      *    DISPLAY 'Random number: ' RANDOM-INTEGER
+
+           IF RANDOM-INTEGER = 0
+               SET SO-COMPUTER-STARTS TO TRUE
+           ELSE
+               SET SO-PLAYER-STARTS TO TRUE
+           END-IF
+
+           DISPLAY WS-WHOSE-TURN ' starts!' 
+           IF SO-COMPUTER-STARTS
+              DISPLAY 'COMPUTER STARTS'
+              MOVE 'INPUT VALID!'         TO OUT1O
+              MOVE 'COMP. STARTS'         TO OUT2O
+              MOVE 'PRESS ENTER '         TO OUT3O
+           ELSE
+              DISPLAY 'PLAYER STARTS'
+              MOVE 'PICK A FIELD'         TO OUT1O
+              MOVE 'WITH MOUSE &'         TO OUT2O
+              MOVE 'PRESS ENTER '         TO OUT3O
+           END-IF
+           .
+      ******************************************************************
+      *                     2005-DISTR-COMP-SHIPS                      *
+      * 
+      * THIS PARAGRAPH IS RESPONSIBLE FOR DISTRIBUTING THE COMPUTER'S  *
+      * SHIPS. IT FIRST INITIALIZES THE SHIPS BY CALLING 2080-INIT-SHIPS 
+      * AND THEN PLACES ALL THE SHIPS BY CALLING 2090-PLACE-ALL-SHIPS. *
+      ******************************************************************
+       2005-DISTR-COMP-SHIPS.
+           PERFORM 2080-INIT-SHIPS
+           PERFORM 2090-PLACE-ALL-SHIPS
+           .
+      ******************************************************************
+      *                        2080-INIT-SHIPS                         *
+      *
+      * THIS PARAGRAPH INITIALIZES THE COMPUTER'S SHIPS FOR THE GAME.  *
+      * IT BEGINS BY RESETTING THE FIELD, SETTING ALL CELLS TO EMPTY.  *
+      * THEN, FOR EACH SHIP, IT SETS ITS LENGTH AND UNIQUE ID.         *
+      * IT ASSIGNS VALUES BASED ON THE SHIP INDEX, ADJUSTING THE SHIP'S*
+      * LENGTH AND THE SHIP ID ACCORDINGLY. THE COORDINATES OF EACH CELL
+      * OF THE SHIP ARE INITIALIZED TO ZERO, AND A FLAG (COMP-NOT-HIT) *
+      * IS SET TO TRUE FOR EACH SHIP CELL TO INDICATE IT IS NOT YET HIT*
+      ******************************************************************
+       2080-INIT-SHIPS.
+           MOVE 1 TO WS-SHIP-ID
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+             PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL COL-INDEX > 10
+                   MOVE ' ' TO FIELDO(2, ROW-INDEX, COL-INDEX)
+             END-PERFORM
+           END-PERFORM
+
+           PERFORM VARYING WS-COMP-SHIP-INDEX FROM 1 BY 1 UNTIL 
+                                                 WS-COMP-SHIP-INDEX > 10
+               SET COMP-UNSUNK(WS-COMP-SHIP-INDEX) TO TRUE
+               EVALUATE WS-COMP-SHIP-INDEX
+                   WHEN 1
+                       MOVE 5 TO WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                       MOVE WS-SHIP-ID TO 
+                                     WS-COMP-SHIP-ID(WS-COMP-SHIP-INDEX)
+                       ADD 1 TO WS-SHIP-ID
+                   WHEN 2
+                   WHEN 3
+                       MOVE 4 TO WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                       MOVE WS-SHIP-ID TO 
+                                     WS-COMP-SHIP-ID(WS-COMP-SHIP-INDEX)
+                       ADD 1 TO WS-SHIP-ID
+                   WHEN 4
+                   WHEN 5
+                   WHEN 6
+                       MOVE 3 TO WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                       MOVE WS-SHIP-ID TO 
+                                     WS-COMP-SHIP-ID(WS-COMP-SHIP-INDEX)
+                       ADD 1 TO WS-SHIP-ID
+                   WHEN OTHER
+                       MOVE 2 TO WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                       MOVE WS-SHIP-ID TO 
+                                     WS-COMP-SHIP-ID(WS-COMP-SHIP-INDEX)
+                       ADD 1 TO WS-SHIP-ID
+               END-EVALUATE
+
+      * setting coordinates for each cell
+               PERFORM VARYING WS-COMP-CELL-INDEX FROM 1 BY 1 UNTIL 
+                               WS-COMP-CELL-INDEX >
+                               WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                 MOVE 0 TO 
+                         CELL-X(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+                 MOVE 0 TO 
+                         CELL-Y(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+                 SET COMP-NOT-HIT(WS-COMP-SHIP-INDEX,WS-COMP-CELL-INDEX) 
+                          TO TRUE
+      *          DISPLAY 'cells :' 
+      *                   CELL-X(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+      *              ', ' CELL-Y(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+               END-PERFORM
+           END-PERFORM
+           .
+      ******************************************************************
+      *                        2090-PLACE-ALL-SHIPS                    *
+      *
+      * THE PARAGRAPH HANDLES PLACING ALL COMPUTER'S SHIPS ON THE BOARD*
+      * IT STARTS BY SETTING WS-CURRENT-RUN TO 0, WHICH WILL TRACK THE *
+      * NUMBER OF ATTEMPTS MADE TO PLACE SHIPS. FOR EACH SHIP, IT 
+      * GENERATES RANDOM POSITION AND CHECKS IF THE POSITION IS VALID. *
+      * THIS VALIDATION PROCESS CONTINUES IN A LOOP UNTIL A VALID      *
+      * POSITION IS FOUND. ONCE A SHIP IS SUCCESSFULLY PLACED, THE     *
+      * PROCESS MOVES ON TO THE NEXT SHIP. THE LOOP CONTINUES FOR ALL  *
+      * SHIPS, ENSURING THAT EACH ONE IS PLACED WITHOUT OVERLAP OR     *
+      * INVALID POSITIONS. THE METHOD GUARANTEES THAT ALL SHIPS ARE    *
+      * PLACED ON THE BOARD BEFORE THE GAME CONTINUES.                 *
+      ******************************************************************
+       2090-PLACE-ALL-SHIPS.
+           MOVE 0 TO WS-CURRENT-RUN
+           PERFORM VARYING WS-COMP-SHIP-INDEX FROM 1 BY 1 UNTIL 
+                                                 WS-COMP-SHIP-INDEX > 10
+                MOVE WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                                                TO WS-CURRENT-SHIP-SIZE
+                SET SO-IS-NOT-PLACED TO TRUE
+                PERFORM UNTIL SO-IS-PLACED
+                     ADD 1 TO WS-CURRENT-RUN
+      *              DISPLAY 'CURR RUN ' WS-CURRENT-RUN
+                     PERFORM 2096-GENERATE-RANDOM-POSITION
+                     PERFORM 2097-VALIDATE-RANDOM-POSITION
+      *              DISPLAY 'return-code: ' RETURN-CODE
+                     IF RETURN-CODE = 0
+                         PERFORM 2098-MARK-SHIP
+                         SET SO-IS-PLACED TO TRUE
+                     END-IF
+                END-PERFORM
+           END-PERFORM
+           .
+      ******************************************************************
+      *                  2096-GENERATE-RANDOM-POSITION                 *
+      * 
+      * THIS PARAGRAPH GENERATES RANDOM STARTING POSITIONS FOR A SHIP ON
+      * THE BOARD. IT BEGINS BY ACCEPTING THE SYSTEM TIME AND THEN USING
+      * THIS TIME TO GENERATE RANDOM VALUES. THESE VALUES ARE USED TO  *
+      * CALCULATE RANDOM STARTING ROW AND COLUMN POSITIONS, ENSURING   *
+      * THAT THE SHIP FITS WITHIN THE BOUNDARIES OF THE GAME BOARD.    *
+      * ADDITIONALLY, A RANDOM DIRECTION (HORIZONTAL OR VERTICAL) IS   *
+      * ASSIGNED TO THE SHIP, BASED ON THE RESULT OF A MODULUS OPERATION
+      * THIS SETUP PREPARES THE SHIP FOR PLACEMENT IN THE NEXT STEPS.  *
+      ******************************************************************
+       2096-GENERATE-RANDOM-POSITION.
+           ACCEPT RANDOM-VAL1 FROM TIME
+           COMPUTE RANDOM-VAL1 = RANDOM-VAL1 +
+                                 FUNCTION RANDOM(WS-CURRENT-RUN) * 1003
+           COMPUTE ROW-START = FUNCTION RANDOM(RANDOM-VAL1) * 9 + 1
+
+           COMPUTE RANDOM-VAL2 = RANDOM-VAL1 +
+                                 FUNCTION RANDOM(ROW-START) *
+                                 FUNCTION RANDOM(WS-CURRENT-RUN) * 781
+           COMPUTE COL-START = FUNCTION RANDOM(RANDOM-VAL2) * 9 + 1
+
+           COMPUTE RANDOM-VAL3 = RANDOM-VAL2 +
+                                 FUNCTION RANDOM(COL-START) *
+                                 FUNCTION RANDOM(WS-CURRENT-RUN) * 1003
+      *    DISPLAY 'rnd-1,2,3: ' RANDOM-VAL1 ', ' RANDOM-VAL2 ', '
+      *                          RANDOM-VAL3
+           COMPUTE RANDOM-VAL3 = FUNCTION RANDOM(RANDOM-VAL3) * 9 + 1
+           IF FUNCTION MOD(RANDOM-VAL3, 2)  = 0
+               MOVE 'H' TO DIRECTION
+           ELSE
+               MOVE 'V' TO DIRECTION
+           END-IF
+      *    DISPLAY 'row-start, col-start, POS ' ROW-START ', '
+      *             COL-START ', ' DIRECTION
+           .
+      ******************************************************************
+      *                  2097-VALIDATE-RANDOM-POSITION                 *
+      * 
+      * THIS PARAGRAPH VALIDATES THE RANDOMLY GENERATED POSITION FOR A *
+      * SHIP. FIRST, IT CHECKS IF THE SHIP WILL FIT ON THE BOARD GIVEN *
+      * ITS DIRECTION (HORIZONTAL OR VERTICAL). IF THE SHIP EXCEEDS THE*
+      * BOUNDARIES, IT SETS A RETURN CODE TO 1, INDICATING AN INVALID  *
+      * POSITION. NEXT, IT CHECKS IF THE SHIP COLLIDES WITH ANY EXISTING 
+      * SHIP BY EXAMINING THE CALCULATED POSITIONS FOR EACH PART OF THE*
+      * SHIP. ADDITIONALLY, IT CHECKS ADJACENT CELLS TO ENSURE THAT THE*
+      * SHIPS DO NOT TOUCH, EITHER HORIZONTALLY OR VERTICALLY. IF ANY  *
+      * CONFLICTS ARE FOUND, IT SETS THE RETURN CODE TO 1 AND EXITS THE*
+      * PARAGRAPH. IF NO ISSUES ARE FOUND, THE VALIDATION SUCCEEDS,    *
+      * MEANING THAT THE SHIP CAN BE PLACED IN THE GIVEN POSITION.     *
+      ******************************************************************
+       2097-VALIDATE-RANDOM-POSITION.
+           MOVE 0 TO RETURN-CODE
+      * Will the ship fit on the board?
+           IF DIRECTION = 'H'
+               IF COL-START + WS-CURRENT-SHIP-SIZE - 1 > 10
+                   MOVE 1 TO RETURN-CODE
+      *            DISPLAY 'The ship won't fit on the board (horiz).'
+                   EXIT PARAGRAPH
+               END-IF
+           ELSE
+               IF ROW-START + WS-CURRENT-SHIP-SIZE - 1 > 10
+                   MOVE 1 TO RETURN-CODE
+      *            DISPLAY 'The ship won't fit on the board (vert).'
+                   EXIT PARAGRAPH
+               END-IF
+           END-IF
+      * Checking if the fields are free and if the ships are not 
+      * touching each other
+           PERFORM VARYING INDX FROM 0 BY 1 UNTIL
+                                     INDX > WS-CURRENT-SHIP-SIZE - 1
+      * Determining the ship's position
+             IF DIRECTION = 'H'
+                   COMPUTE CALCULATED-ROW = ROW-START
+                   COMPUTE CALCULATED-COL = COL-START + INDX
+             ELSE
+                   COMPUTE CALCULATED-ROW = ROW-START + INDX
+                   COMPUTE CALCULATED-COL = COL-START
+             END-IF
+
+      * Checking the target field
+               IF FIELDI(2, CALCULATED-ROW, CALCULATED-COL) = 'X'
+                   MOVE 1 TO RETURN-CODE
+      *            DISPLAY 'The ship collides with another ship.'
+                   EXIT PARAGRAPH
+               END-IF
+      * Checking adjacent fields vertically and horizontally
+             PERFORM VARYING ROW-DELTA FROM -1 BY 2 UNTIL ROW-DELTA > 1
+                   COMPUTE ADJACENT-ROW = CALCULATED-ROW + ROW-DELTA
+                   IF ADJACENT-ROW > 0 AND ADJACENT-ROW <= 10
+                       IF FIELDI(2, ADJACENT-ROW, CALCULATED-COL) = 'X'
+                           MOVE 1 TO RETURN-CODE
+      *                    DISPLAY 'Vertical touch'
+                           EXIT PARAGRAPH
+                       END-IF
+                   END-IF
+             END-PERFORM
+             PERFORM VARYING COL-DELTA FROM -1 BY 2 UNTIL COL-DELTA > 1
+                   COMPUTE ADJACENT-COL = CALCULATED-COL + COL-DELTA
+                   IF ADJACENT-COL > 0 AND ADJACENT-COL <= 10
+                       IF FIELDI(2, CALCULATED-ROW, ADJACENT-COL) = 'X'
+                           MOVE 1 TO RETURN-CODE
+      *                    DISPLAY 'Horizontal touch'
+                           EXIT PARAGRAPH
+                       END-IF
+                   END-IF
+             END-PERFORM
+           END-PERFORM
+           .
+      ******************************************************************
+      *                        2098-MARK-SHIP                          *
+      * 
+      * THE PARAGRAPH MARKS THE SHIP ON THE BOARD BY ITERATING THROUGH *
+      * THE CELLS CORRESPONDING TO THE SHIP'S SIZE. BASED ON THE SHIP'S*
+      * DIRECTION ('H' FOR HORIZONTAL, 'V' FOR VERTICAL), IT UPDATES THE
+      * GRID WITH 'X' TO REPRESENT THE SHIP'S POSITION. IT ALSO STORES *
+      * THE COORDINATES OF EACH CELL OF THE SHIP IN A SEPARATE DATA    *
+      * STRUCTURE FOR LATER REFERENCE. THE PROCESS IS REPEATED FOR ALL *
+      * THE CELLS THAT BUILD THE SHIP, USING THE STARTING ROW AND COLUMN
+      * AND UPDATING THE GRID ACCORDINGLY.                             *
+      ******************************************************************  
+       2098-MARK-SHIP.
+           PERFORM VARYING WS-COMP-CELL-INDEX FROM 1 BY 1
+                   UNTIL WS-COMP-CELL-INDEX > WS-CURRENT-SHIP-SIZE
+             COMPUTE CALCULATED-ROW = ROW-START + WS-COMP-CELL-INDEX - 1
+             COMPUTE CALCULATED-COL = COL-START + WS-COMP-CELL-INDEX - 1
+
+             EVALUATE DIRECTION
+                  WHEN 'H'
+                   MOVE 'X' TO FIELDI(2, ROW-START, CALCULATED-COL)
+                    MOVE ROW-START TO 
+                          CELL-X(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+                    MOVE CALCULATED-COL TO 
+                           CELL-Y(WS-COMP-SHIP-INDEX,WS-COMP-CELL-INDEX)
+                  WHEN 'V'
+                   MOVE 'X' TO FIELDI(2, CALCULATED-ROW, COL-START)
+                    MOVE CALCULATED-ROW TO 
+                           CELL-X(WS-COMP-SHIP-INDEX,WS-COMP-CELL-INDEX)
+                    MOVE COL-START TO 
+                          CELL-Y(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+             END-EVALUATE
+           END-PERFORM
+           .
+      ******************************************************************
+      *                    2010-DISPLAY-COMPUTER-BOARD                 *
+      * 
+      * THE PARAGRAPH DISPLAYS THE COMPUTER'S BOARD. IT FIRST ITERATES *
+      * THROUGH EACH ROW AND COLUMN TO SHOW THE GRID, DISPLAYING THE   *
+      * CONTENTS OF EACH CELL (REPRESENTING THE BOARD) IN A LINE.      *
+      * THEN IT ITERATES THROUGH ALL THE COMPUTER'S SHIPS, SHOWING     *
+      * DETAILS SUCH AS THE SHIP'S LENGTH, ID, COORDINATES OF EACH CELL*
+      * AND WHETHER EACH CELL HAS BEEN HIT OR NOT. THIS INFORMATION IS *
+      * DISPLAYED FOR DEBUGGING OR TRACKING SHIP STATUS.               *
+      ******************************************************************  
+       2010-DISPLAY-COMPUTER-BOARD.
+           PERFORM VARYING ROW-INDEX FROM 1 BY 1 UNTIL ROW-INDEX > 10
+               MOVE SPACES TO DISPLAY-LINE
+               MOVE 1 TO LINE-POSITION
+               PERFORM VARYING COL-INDEX FROM 1 BY 1 UNTIL 
+                                                         COL-INDEX > 10
+                   STRING FIELDO(2, ROW-INDEX, COL-INDEX) 
+                   DELIMITED BY SIZE
+                          INTO DISPLAY-LINE
+                   WITH POINTER LINE-POSITION
+               END-PERFORM
+               DISPLAY DISPLAY-LINE
+           END-PERFORM
+
+           PERFORM VARYING WS-COMP-SHIP-INDEX FROM 1 BY 1 UNTIL 
+                                                WS-COMP-SHIP-INDEX > 10
+               PERFORM VARYING WS-COMP-CELL-INDEX FROM 1 BY 1 UNTIL 
+                               WS-COMP-CELL-INDEX >
+                               WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                   DISPLAY 'Length,ID,Row,Col ' 
+                        WS-SHIP-LENGTH(WS-COMP-SHIP-INDEX)
+                  ', ' WS-COMP-SHIP-ID(WS-COMP-SHIP-INDEX)
+                  ', ' CELL-X(WS-COMP-SHIP-INDEX,WS-COMP-CELL-INDEX)
+                  ', ' CELL-Y(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+      *            ', ' CELL-HIT(WS-COMP-SHIP-INDEX, WS-COMP-CELL-INDEX)
+               END-PERFORM
+           END-PERFORM
+           .
+      ******************************************************************
+      *                  2600-TRANSLATE-CURSOR-POSITION                *
+      *
+      * THIS PARAGRAPH TRANSLATES THE CURSOR POSITION (EIBCPOSN)       *
+      * RECEIVED FROM THE TERMINAL INTO THE CORRESPONDING ROW AND COLUMN
+      * ON THE BOARD. IT ENSURES THAT THE CURSOR IS WHITHIN THE BOUNDS *
+      * OF THE BOARD AND SETS AN FLAG TO INDICATE WHETHER THE CURSOR IS*
+      * ON THE BOARD OR NOT.                                           *
+      ******************************************************************
+       2600-TRANSLATE-CURSOR-POSITION.
+               IF EIBCPOSN > 0
+                 DISPLAY 'EIBCPOSN:' EIBCPOSN
+                 MOVE EIBCPOSN TO WS-CURSOR-POSITION
+                 COMPUTE WS-CURSOR-ROW = FUNCTION INTEGER(EIBCPOSN / 
+                               CT-WIDTH) + 1 - 6         
+                 COMPUTE WS-CURSOR-COL = (EIBCPOSN - CT-WIDTH *
+                    FUNCTION INTEGER(EIBCPOSN / CT-WIDTH) - 56) / 2 + 1
+      *IF(EIBCPOSN-CT-WIDTH*FUNCTIONINTEGER(EIBCPOSN/CT-WIDTH)-56)MOD2=0
+                 DISPLAY 'Row-cursor: ' WS-CURSOR-ROW
+                 DISPLAY 'Col-cursor: ' WS-CURSOR-COL
+               ELSE
+                 DISPLAY 'Cursor not set!'
+               END-IF
+
+           IF WS-CURSOR-ROW >= 1  AND
+              WS-CURSOR-ROW <= 10 AND
+              WS-CURSOR-COL >= 1  AND
+              WS-CURSOR-COL <= 10
+              SET SO-CURSOR-ON-BOARD-YES TO TRUE
+           ELSE
+              SET SO-CURSOR-ON-BOARD-NO TO TRUE
+           END-IF
+           .
+      ******************************************************************
+      *                      2100-RECEIVE-MAP                          *
+      *                                                                *
+      * THIS PARAGRAPH RECEIVS THE MAP FROM THE TERMINAL.              *
+      ******************************************************************
+       2100-RECEIVE-MAP.
+           EXEC CICS
+              RECEIVE MAP('MP4002') MAPSET('MP4002')
+           END-EXEC
+           PERFORM 4000-CHECK-EIBRESP
+           .
+      ******************************************************************
+      *                        2200-SEND-MAP                           *
+      *                                                                *
+      * THIS PARAGRAPH SENDS MAP TO THE TERMINAL FOR USER INTERACTIONS.*
+      ******************************************************************
+       2200-SEND-MAP.
+           EXEC CICS
+              SEND MAP('MP4002') MAPSET('MP4002')
+           END-EXEC
+           PERFORM 4000-CHECK-EIBRESP
+           .
+      ******************************************************************
+      *                  2201-SEND-MAP-WITH-CURSOR                     *
+      *                                                                *
+      * THIS PARAGRAPH SENDS MAP WITH THE LAST CURSOR POSITION TO THE  *
+      * TERMINAL FOR USER INTERACTIONS.
+      ******************************************************************
+       2201-SEND-MAP-WITH-CURSOR.
+           EXEC CICS
+              SEND MAP('MP4002') MAPSET('MP4002')
+              CURSOR(WS-CURSOR-POSITION)
+           END-EXEC
+           PERFORM 4000-CHECK-EIBRESP
+           .
+      ******************************************************************
+      *                          3000-FINAL                            *
+      *
+      *  THIS PARAGRAPH HANDLES THE PROGRAM'S FINAL PROCESSING.        *
+      *  IF TERMINATION IS REQUESTED, IT CLEARS THE TERMINAL, PERFORMS *
+      *  A NORMAL RETURN AND STOPS THE PROGRAM.                        *
+      *  OTHERWISE, IT RETURNS WITH A TRANSACTION ID FOR CONTINUED     *
+      *  PROCESSING.                                                   *
+      ******************************************************************
+      *
+       3000-FINAL.
+
+           IF SO-TERMINATE-PROCESSING
+              DISPLAY 'TERMINATING PROCESSING'
+              PERFORM 4100-CLEAR-TERMINAL
+              PERFORM 3100-NORMAL-RETURN
+           ELSE
+              PERFORM 3200-RETURN-WITH-TRANSID
+           END-IF
+           STOP RUN
+           .
+      ******************************************************************
+      *                     3100-NORMAL-RETURN                         *
+      *                                                                *
+      * HERE IT HANDLES THE NORMAL TERMINATION OF THE PROGRAM          *
+      ******************************************************************
+       3100-NORMAL-RETURN.
+              EXEC CICS
+                 RETURN
+              END-EXEC
+           .
+      ******************************************************************
+      *                     3200-RETURN-WITH-TRANSID                   *
+      *                                                                *
+      * HERE IT RETURNS CONTROL TO CICS WITH A SPECIFIED TRANSACTION ID*
+      * AND PASSES THE WORKING STORAGE AREA AS COMMAREA TO MAINTAIN DATA 
+      * PERSISTANCE BETWEEN TRANSACTION INVOCATIONS.                   *
+      ******************************************************************
+       3200-RETURN-WITH-TRANSID.
+              EXEC CICS
+                 RETURN TRANSID('4005') COMMAREA(WS)
+              END-EXEC
+           .
+      ******************************************************************
+      *                     4000-CHECK-EIBRESP                         *
+      *                                                                *
+      * THIS PARAGRAPH VALIDATES THE EIBRESP.
+      * IT ENSURES THE RESPONSE IS NORMAL, OTHERWISE IT SENDS AN ERROR
+      * TO LOGS AND TERMINATES THE PROGRAM.
+      ******************************************************************
+       4000-CHECK-EIBRESP.
+           EVALUATE EIBRESP
+             WHEN DFHRESP(NORMAL)
+               CONTINUE
+             WHEN OTHER
+               DISPLAY 'ERROR OCCURRED'
+               MOVE EIBRESP TO WS-EIBRESP-VIS
+               DISPLAY 'EIBRESP: ' WS-EIBRESP-VIS
+               PERFORM 3100-NORMAL-RETURN
+           END-EVALUATE
+           .
+      ******************************************************************
+      *                     4100-CLEAR-TERMINAL                        *
+      *                                                                *
+      * THIS PARAGRAPH IS RESPONSIBLE FOR CLEARING THE TERMINAL SCREEN *
+      ******************************************************************
+       4100-CLEAR-TERMINAL.
+           EXEC CICS
+              SEND FROM(WS-DUMMY)
+              ERASE
+           END-EXEC
+           PERFORM 4000-CHECK-EIBRESP
+           .
+      ******************************************************************
+
