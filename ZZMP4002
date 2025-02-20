@@ -1,0 +1,53 @@
+       01  MP4002I.
+           02  FILLER PIC X(12).
+           02 GAME-ARRAY.
+             03 PLAYER-COMP-ARRAY OCCURS 2 TIMES.
+               04 BLINE OCCURS 10 TIMES.
+                 05 BCELL OCCURS 10 TIMES.
+                   10  FIELDL    COMP  PIC  S9(4).
+                   10  FIELDF    PICTURE X.
+                   10  FILLER REDEFINES FIELDF.
+                     11 FIELDA    PICTURE X.
+                   10  FILLER   PICTURE X(2).
+                   10  FIELDI  PIC X(1).
+           02  OUT1L    COMP  PIC  S9(4).
+           02  OUT1F    PICTURE X.
+           02  FILLER REDEFINES OUT1F.
+             03 OUT1A    PICTURE X.
+           02  FILLER   PICTURE X(2).
+           02  OUT1I  PIC X(12).
+           02  OUT2L    COMP  PIC  S9(4).
+           02  OUT2F    PICTURE X.
+           02  FILLER REDEFINES OUT2F.
+             03 OUT2A    PICTURE X.
+           02  FILLER   PICTURE X(2).
+           02  OUT2I  PIC X(12).
+           02  OUT3L    COMP  PIC  S9(4).
+           02  OUT3F    PICTURE X.
+           02  FILLER REDEFINES OUT3F.
+             03 OUT3A    PICTURE X.
+           02  FILLER   PICTURE X(2).
+           02  OUT3I  PIC X(12).
+
+       01  MP4002O REDEFINES MP4002I.
+           02  FILLER PIC X(12).
+           02 GAME-ARRAY-OUTPUT.
+             03 PLAYER-COMP-ARRAY-O OCCURS 2 TIMES.
+               04 BLINE-O OCCURS 10 TIMES.
+                 05 BCELL-O OCCURS 10 TIMES.
+                   10  FILLER PICTURE X(3).
+                   10  FIELDC PICTURE X.
+                   10  FIELDH PICTURE X.
+                   10  FIELDO PIC X(1).
+           02  FILLER PICTURE X(3).
+           02  OUT1C    PICTURE X.
+           02  OUT1H    PICTURE X.
+           02  OUT1O  PIC X(12).
+           02  FILLER PICTURE X(3).
+           02  OUT2C    PICTURE X.
+           02  OUT2H    PICTURE X.
+           02  OUT2O  PIC X(12).
+           02  FILLER PICTURE X(3).
+           02  OUT3C    PICTURE X.
+           02  OUT3H    PICTURE X.
+           02  OUT3O  PIC X(12).
